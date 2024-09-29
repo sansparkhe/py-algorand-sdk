@@ -1,0 +1,84 @@
+import base64
+import hashlib
+import hmac
+import os  # Import os to access environment variables
+
+from algosdk import transaction
+from algosdk.v2client import algod
+
+
+def encrypt_message(message: str, key: str) -> str:
+    # Create a new HMAC object
+    hmac_obj = hmac.new(key.encode(), message.encode(), hashlib.sha256)
+    # Return the base64-encoded digest
+    return base64.b64encode(hmac_obj.digest()).decode()
+
+def send_transaction_with_note(
+    algod_client: algod.AlgodClient,
+    private_key: str,
+    sender: str,
+    receiver: str,
+    amount: int,
+    encrypted_note: str
+) -> str:
+
+    # Prepare the note by encoding it
+    note_encoded = base64.b64encode(encrypted_note.encode()).decode()
+
+    # Create a transaction
+    params = algod_client.suggested_params()
+    txn = transaction.PaymentTxn(
+        sender=sender,
+        receiver=receiver,
+        amt=amount,
+        sp=params,
+        note=note_encoded.encode()
+    )
+
+    # Sign the transaction with the private key
+    signed_txn = txn.sign(private_key)
+
+    # Send the transaction
+    txid = algod_client.send_transaction(signed_txn)
+
+    # Wait for confirmation
+    transaction.wait_for_confirmation(algod_client, txid)
+
+    return txid
+
+def main():
+    # Example values (replace these with actual values)
+    algod_address = "https://testnet-api.algonode.network"  # Algorand TestNet
+    algod_token = ""
+    sender = "VIX7X4GMIRY4AS5AJSVHIKDM427XEV2K4UYARC6DC2LB2XODXS4EHMLC2U"
+    receiver = "2JAZQO6Z5BCXFMPVW2CACK2733VGKWLZKS6DGG565J7H5NH77JNHLIIXLY"
+    amount = 1000000  # 1 Algo in microalgos
+
+    # Get the private key from an environment variable
+    private_key = os.getenv("PRIVATE_KEY")
+
+    if not private_key:
+        raise ValueError("Private key not found in environment variables.")
+
+    # Encrypt the message
+    key = "5J2ZBQCA5"
+    message = "Algorand uses Pure Proof of Stake Algorithm."
+    encrypted_note = encrypt_message(message, key)
+
+    # Create an Algod client
+    algod_client = algod.AlgodClient(algod_token, algod_address)
+
+    # Send the transaction with the encrypted note
+    txid = send_transaction_with_note(
+        algod_client,
+        private_key,
+        sender,
+        receiver,
+        amount,
+        encrypted_note
+    )
+
+    print(f"Transaction ID: {txid}")
+
+if __name__ == "__main__":
+    main()
